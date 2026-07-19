@@ -1,4 +1,5 @@
 import numpy as np
+import numpy
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier as rf
@@ -129,6 +130,10 @@ def processTestData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Test.csv")
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
+
+  rawDF = df.copy()
+  saveCSVToDrive(rawDF,f"{baseName}RawTest.csv")
+
   numericalDF = removeUnimportantNumericalColumns(df,yArray,baseName,"test")
   categoricalDF = removeUnimportantCategoricalColumns(df,yArray,baseName,"test")
   scaledDF = scaleTestDF(numericalDF,baseName)
@@ -140,8 +145,12 @@ def processTestData(baseName):
 def processTrainData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Train.csv")
   print(df.columns)
+  rawDF = df.copy()
+  saveCSVToDrive(rawDF,f"{baseName}RawTrain.csv")
+
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
+
   numericalDF,categoricalDF = separateDFBySubtype(df,baseName)
   numericalDF = removeUnimportantNumericalColumns(numericalDF,yArray,baseName)
   categoricalDF = removeUnimportantCategoricalColumns(categoricalDF,yArray,baseName)
@@ -154,7 +163,7 @@ def processTrainData(baseName):
 
 def transformDate(data):
   dateTimeColumns = ['First Contact','Last Contact', 'First Call', 'Signed up for a demo',
-                     'Filled in customer survey','Did sign up to the platform','Account Manager assigned','Subscribed']
+                     'Filled in customer survey','Did sign up to the platform','Account Manager assigned']
   for col in dateTimeColumns:
     data[col] = pd.to_datetime(data[col], format='%Y-%d-%m', errors='coerce')
     data[col + 'Year'] = data[col].dt.year
@@ -164,7 +173,9 @@ def transformDate(data):
   return data
 
 def binarizeTargetsFromDF(df):
+    df['Subscribed'] = pd.to_datetime(df['Subscribed'], format='%Y-%d-%m', errors='coerce').astype('int64')
     df['isSubscribed'] = (df['Subscribed'] > 0).astype(int)
+    df.drop('Subscribed',axis=1,inplace=True)
     return df
 
 def smote(X,y,baseName):
