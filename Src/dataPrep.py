@@ -1,9 +1,10 @@
 import numpy as np
+import numpy
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier as rf
 import pickle
-from imblearn.over_sampling import SMOTENC
+from imblearn.over_sampling import RandomOverSampler
 from os.path import exists
 from sklearn.preprocessing import StandardScaler
 import category_encoders as ce
@@ -148,31 +149,13 @@ def binarizeTargetsFromDF(df):
     df.drop('Subscribed',axis=1,inplace=True)
     return df
 
-def smote(X,y,baseName):
-    # Create a copy to avoid modifying the original X directly
-    X_temp = X.copy()
+def overSample(X,y,baseName):
+    # Initialize and apply RandomOverSampler
+    # RandomOverSampler works directly on the input features without specific categorical handling.
+    balancer = RandomOverSampler(random_state=51)
+    resampledX, resampledy = balancer.fit_resample(X, y)
 
-    # Separate numerical and categorical columns from the copy
-    numerical_cols = X_temp.select_dtypes(include=np.number).columns.tolist()
-    categorical_cols = X_temp.select_dtypes(exclude=np.number).columns.tolist()
-
-    # Apply Ordinal Encoding only for SMOTENC (temporary encoder)
-    # handle_unknown='return_nan' means unknown categories will be encoded as NaN.
-    temp_ordinal_encoder = ce.OrdinalEncoder(cols=categorical_cols, handle_unknown='return_nan')
-    X_encoded_for_smote = temp_ordinal_encoder.fit_transform(X_temp)
-
-    # Get the indices of categorical features in X_encoded_for_smote
-    categorical_features_indices = [X_encoded_for_smote.columns.get_loc(col) for col in categorical_cols]
-
-    # Initialize and apply SMOTENC
-    balancer = SMOTENC(categorical_features=categorical_features_indices, random_state=51)
-    resampledX_encoded_for_smote, resampledy = balancer.fit_resample(X_encoded_for_smote, y)
-
-    # Inverse transform the categorical columns back to their original labels
-    # The inverse_transform will handle the categorical columns, while numerical will remain as they were after SMOTENC.
-    resampledX_original_format = temp_ordinal_encoder.inverse_transform(resampledX_encoded_for_smote)
-
-    return resampledX_original_format, resampledy
+    return resampledX, resampledy
 
 def splitData(baseName):
     df = retrieveCSVFromDrive("cleanedData.csv")
@@ -185,7 +168,7 @@ def splitData(baseName):
     XTrain, XTest, yTrain, yTest = train_test_split(originalX, originalYArray, test_size=0.2, random_state=51, stratify=originalYArray)
 
     # Apply SMOTE only to the training data
-    resampledXTrain, resampledYTrain = smote(XTrain, yTrain, baseName)
+    resampledXTrain, resampledYTrain = overSample(XTrain, yTrain, baseName)
 
     train = resampledXTrain.copy()
     train['isSubscribed'] = resampledYTrain
