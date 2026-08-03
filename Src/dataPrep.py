@@ -1,5 +1,4 @@
 import numpy as np
-import numpy
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier as rf
@@ -67,34 +66,6 @@ def separateDFBySubtype(df,baseName):
   savePickleFileToDrive(categoricalCols, f"{baseName}CategoricalCols.pkl")
   return numericalDF,categoricalDF
 
-def removeUnimportantCategoricalColumns(categoricalDF,y,combinedName,datasetType = 'train'):
-  if datasetType == 'test':
-      significantColumns = retrievePickleFileFromDrive(f"{combinedName}SignificantCategoricalCols.pkl")
-  else:
-      le = ce.OrdinalEncoder(return_df=True)
-      leDF = le.fit_transform(categoricalDF)
-      pValues = chi2(leDF, y)[1]
-      pValueDF = pd.DataFrame({"feature":list(categoricalDF.columns),"pValue":pValues},columns=["feature","pValue"],index=None)
-      lowPDF = pValueDF[pValueDF["pValue"] < 0.05]
-      significantColumns = list(lowPDF['feature'])
-      savePickleFileToDrive(significantColumns, f"{combinedName}SignificantCategoricalCols.pkl")
-  return categoricalDF[significantColumns]
-
-def removeUnimportantNumericalColumns(numericalDF,y,combinedName,datasetType = 'train'):
-    if datasetType == 'test':
-        significantColumns = retrievePickleFileFromDrive(f"{combinedName}SignificantNumericalCols.pkl")
-    else:
-        numericalCols = list(numericalDF.columns)
-        significantColumns = []
-        allNumericalColumns = numericalDF.columns
-        for col in allNumericalColumns:
-            x = numericalDF[[col]].values.ravel()
-            p = spearmanr(x,y)[1]
-            if p < 0.05:
-                significantColumns.append(str(col))
-        savePickleFileToDrive(significantColumns, f"{combinedName}SignificantNumericalCols.pkl")
-    return numericalDF[significantColumns]
-
 def encodeTestDF(categoricalDF,baseName):
   ohe = retrievePickleFileFromDrive(f"{baseName}OneHotEncoder.pkl")
   le = retrievePickleFileFromDrive(f"{baseName}LabelEncoder.pkl")
@@ -103,7 +74,7 @@ def encodeTestDF(categoricalDF,baseName):
   return pd.concat([oheDF,leDF],axis=1)
 
 def encodeDF(categoricalDF,baseName):
-  ohe = ce.OneHotEncoder(handle_unknown='ignore',return_df=True,use_cat_names=True)
+  ohe = ce.OneHotEncoder(handle_unknown='return_nan',return_df=True,use_cat_names=True)
   le = ce.OrdinalEncoder(return_df=True)
   oheDF = ohe.fit_transform(categoricalDF)
   oheColumns = list(oheDF.columns)
@@ -116,13 +87,15 @@ def encodeDF(categoricalDF,baseName):
 def scaleTestDF(df,baseName):
   scaler = retrievePickleFileFromDrive(f"{baseName}Scaler.pkl")
   numericalCols = list(df.columns)
-  df[numericalCols] = scaler.transform(df[numericalCols])
+  # Use .loc for explicit assignment to prevent SettingWithCopyWarning
+  df.loc[:, numericalCols] = scaler.transform(df.loc[:, numericalCols])
   return df
 
 def scaleDF(df,baseName):
   scaler = StandardScaler()
   numericalCols = list(df.columns)
-  df[numericalCols] = scaler.fit_transform(df[numericalCols])
+  # Use .loc for explicit assignment to prevent SettingWithCopyWarning
+  df.loc[:, numericalCols] = scaler.fit_transform(df.loc[:, numericalCols])
   savePickleFileToDrive(scaler,f"{baseName}Scaler.pkl")
   return df
 
@@ -134,8 +107,7 @@ def processTestData(baseName):
   rawDF = df.copy()
   saveCSVToDrive(rawDF,f"{baseName}RawTest.csv")
 
-  numericalDF = removeUnimportantNumericalColumns(df,yArray,baseName,"test")
-  categoricalDF = removeUnimportantCategoricalColumns(df,yArray,baseName,"test")
+  numericalDF,categoricalDF = separateDFBySubtype(df,baseName)
   scaledDF = scaleTestDF(numericalDF,baseName)
   encodedDF = encodeTestDF(categoricalDF,baseName)
   finalDF = pd.concat([scaledDF,encodedDF],axis=1)
@@ -144,16 +116,14 @@ def processTestData(baseName):
 
 def processTrainData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Train.csv")
-  print(df.columns)
-  rawDF = df.copy()
-  saveCSVToDrive(rawDF,f"{baseName}RawTrain.csv")
 
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
 
+  rawDF = df.copy()
+  saveCSVToDrive(rawDF,f"{baseName}RawTrain.csv")
+
   numericalDF,categoricalDF = separateDFBySubtype(df,baseName)
-  numericalDF = removeUnimportantNumericalColumns(numericalDF,yArray,baseName)
-  categoricalDF = removeUnimportantCategoricalColumns(categoricalDF,yArray,baseName)
   scaledDF = scaleDF(numericalDF,baseName)
   encodedDF = encodeDF(categoricalDF,baseName)
   finalDF = pd.concat([scaledDF,encodedDF],axis=1)
@@ -179,13 +149,30 @@ def binarizeTargetsFromDF(df):
     return df
 
 def smote(X,y,baseName):
-    categoricalVariables = [i for i,col in enumerate(X.columns) if not np.issubdtype(X[col].dtype, np.number)]
-    balancer = SMOTENC(categorical_features=categoricalVariables,random_state=51)
-    categoricalVariables = [col for col in X.columns if not np.issubdtype(X[col].dtype, np.number)]
-    encoder = ce.OneHotEncoder(cols=categoricalVariables)
-    X_encoded = encoder.fit_transform(X)
-    resampledX,resampledy = balancer.fit_resample(X_encoded, y)
-    return encoder.inverse_transform(resampledX),resampledy
+    # Create a copy to avoid modifying the original X directly
+    X_temp = X.copy()
+
+    # Separate numerical and categorical columns from the copy
+    numerical_cols = X_temp.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = X_temp.select_dtypes(exclude=np.number).columns.tolist()
+
+    # Apply Ordinal Encoding only for SMOTENC (temporary encoder)
+    # handle_unknown='return_nan' means unknown categories will be encoded as NaN.
+    temp_ordinal_encoder = ce.OrdinalEncoder(cols=categorical_cols, handle_unknown='return_nan')
+    X_encoded_for_smote = temp_ordinal_encoder.fit_transform(X_temp)
+
+    # Get the indices of categorical features in X_encoded_for_smote
+    categorical_features_indices = [X_encoded_for_smote.columns.get_loc(col) for col in categorical_cols]
+
+    # Initialize and apply SMOTENC
+    balancer = SMOTENC(categorical_features=categorical_features_indices, random_state=51)
+    resampledX_encoded_for_smote, resampledy = balancer.fit_resample(X_encoded_for_smote, y)
+
+    # Inverse transform the categorical columns back to their original labels
+    # The inverse_transform will handle the categorical columns, while numerical will remain as they were after SMOTENC.
+    resampledX_original_format = temp_ordinal_encoder.inverse_transform(resampledX_encoded_for_smote)
+
+    return resampledX_original_format, resampledy
 
 def splitData(baseName):
     df = retrieveCSVFromDrive("cleanedData.csv")
@@ -193,11 +180,17 @@ def splitData(baseName):
     originalY = df[['isSubscribed']]
     originalYArray = originalY.values.ravel()
     originalX = df.drop('isSubscribed',axis=1)
-    X,y =smote(originalX,originalYArray,baseName)
-    XTrain,XTest,yTrain,yTest = train_test_split(X, y, test_size=0.2,random_state=51)
-    train = XTrain.copy()
-    train['isSubscribed'] = yTrain
+
+    # Split data first into training and testing sets
+    XTrain, XTest, yTrain, yTest = train_test_split(originalX, originalYArray, test_size=0.2, random_state=51, stratify=originalYArray)
+
+    # Apply SMOTE only to the training data
+    resampledXTrain, resampledYTrain = smote(XTrain, yTrain, baseName)
+
+    train = resampledXTrain.copy()
+    train['isSubscribed'] = resampledYTrain
     saveCSVToDrive(train,f"{baseName}Train.csv")
+
     test = XTest.copy()
     test['isSubscribed'] = yTest
     saveCSVToDrive(test,f"{baseName}Test.csv")
