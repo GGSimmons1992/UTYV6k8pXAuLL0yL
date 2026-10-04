@@ -104,6 +104,9 @@ def processTestData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Test.csv")
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
+  # removing stage because it also gives away subscription status
+  # when Stage is/isn't 'subscribed already'
+  df = df.drop('Stage',axis = 1)
 
   rawDF = df.copy()
   saveCSVToDrive(rawDF,f"{baseName}RawTest.csv")
@@ -120,6 +123,9 @@ def processTrainData(baseName):
 
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
+  # removing stage because it also gives away subscription status
+  # when Stage is/isn't 'subscribed already'
+  df = df.drop('Stage',axis = 1)
 
   rawDF = df.copy()
   saveCSVToDrive(rawDF,f"{baseName}RawTrain.csv")
