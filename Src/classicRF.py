@@ -103,7 +103,7 @@ def main():
     maxFeatures = np.random.choice(possibleMaxFeatures)
     model = createModel(criterion, nEstimators, maxDepth, maxFeatures)
     trainScore, testScore = trainAndTestModel(model, train, test)
-    if (trainScore > .8) and (testScore > .8) and (testScore > bestTestScore):
+    if (trainScore >= .75) and (testScore >= .75) and (testScore > bestTestScore):
       bestTestScore = testScore
       saveModelToDrive(model,"baseRandomForest.pkl")
 
