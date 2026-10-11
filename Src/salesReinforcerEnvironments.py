@@ -143,7 +143,7 @@ class FeatureSelectionEnv(BaseSalesEnv):
         "n_estimators": spaces.Box(low=10,high=500,shape=(1,),dtype=np.int32),
         "max_features_idx": spaces.Discrete(len(self.max_features_options)),
         "criterion_idx": spaces.Discrete(len(self.criterion_options)),
-        "max_depth": spaces.Box(low=1, high=50, shape=(1,), dtype=np.int32)
+        "max_depth": spaces.Box(low=1, high=100, shape=(1,), dtype=np.int32)
     })
 
 
@@ -219,7 +219,7 @@ class FeatureSelectionEnv(BaseSalesEnv):
       self.criterion_idx = (self.criterion_idx - 1 + len(self.criterion_options)) % len(self.criterion_options)
     elif action == self.n_initial_features + 6:
       # Increase max_depth
-      self.max_depth = min(self.max_depth + 1, 50) # Cap at 50
+      self.max_depth = min(self.max_depth + 1, 100) # Cap at 100
     elif action == self.n_initial_features + 7:
       # Decrease max_depth
       self.max_depth = max(self.max_depth - 1, 1) # Min at 1
