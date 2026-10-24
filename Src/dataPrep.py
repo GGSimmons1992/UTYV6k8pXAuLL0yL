@@ -104,9 +104,7 @@ def processTestData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Test.csv")
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
-  # removing stage because it also gives away subscription status
-  # when Stage is/isn't 'subscribed already'
-  df = df.drop('Stage',axis = 1)
+
 
   rawDF = df.copy()
   saveCSVToDrive(rawDF,f"{baseName}RawTest.csv")
@@ -123,9 +121,7 @@ def processTrainData(baseName):
 
   yArray = df[['isSubscribed']].values.ravel()
   df = df.drop('isSubscribed',axis = 1)
-  # removing stage because it also gives away subscription status
-  # when Stage is/isn't 'subscribed already'
-  df = df.drop('Stage',axis = 1)
+
 
   rawDF = df.copy()
   saveCSVToDrive(rawDF,f"{baseName}RawTrain.csv")
@@ -195,10 +191,16 @@ def replaceNanWithZero(df):
     df[col] = df[col].fillna(0)
   return df
 
+def removeStageAndStatus(df):
+  df.drop('Stage',axis=1,inplace=True)
+  df.drop('Status',axis=1,inplace=True)
+  return df
+
 def main():
   data = retrieveCSVFromDrive("SalesCRM - CRM.csv")
   dateTransformedData = transformDate(data)
-  nonNanData = replaceNanWithZero(dateTransformedData)
+  statusLessData = removeStageAndStatus(dateTransformedData)
+  nonNanData = replaceNanWithZero(statusLessData)
   baseName = "SalesReinforcer" # Define baseName here
   saveCSVToDrive(nonNanData,"cleanedData.csv")
   np.random.seed(51)
