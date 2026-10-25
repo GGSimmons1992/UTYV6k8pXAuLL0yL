@@ -82,9 +82,9 @@ def main():
   bestTestScore = 0
 
   possibleCriterion = ["gini","entropy","log_loss"]
-  possibleNEstimators = np.arange(5, 100, 1)
-  possibleMaxDepth = np.arange(2,80,1)
-  possibleMaxFeatures = np.arange(2,120,1)
+  possibleNEstimators = np.arange(5,19, 1)
+  possibleMaxDepth = np.arange(2,16,1)
+  possibleMaxFeatures = np.arange(2,4,1)
 
   scoreVsHyperparameterDictionary = {
       "criterion":[],
@@ -94,23 +94,31 @@ def main():
       "trainScore":[],
       "testScore":[]
   }
+  maxIterations = 2100
 
-  for iteration in range(150):
-    print(f"iteration: {iteration+1} of 150") # Updated print statement
+  for iteration in range(maxIterations):
+    print(f"iteration: {iteration+1} of {maxIterations}")
     criterion = np.random.choice(possibleCriterion)
     nEstimators = np.random.choice(possibleNEstimators)
     maxDepth = np.random.choice(possibleMaxDepth)
     maxFeatures = np.random.choice(possibleMaxFeatures)
+
     model = createModel(criterion, nEstimators, maxDepth, maxFeatures)
     trainScore, testScore = trainAndTestModel(model, train, test)
-    if (trainScore >= .75) and (testScore >= .75) and (testScore > bestTestScore):
-      bestTestScore = testScore
-      saveModelToDrive(model,"baseRandomForest.pkl")
 
-    scoreVHyperparameterDictionary = appendToHyperparameterDictionary(scoreVsHyperparameterDictionary,
+    # 1. Unconditionally track and save the overall best model to prevent losing progress
+    if (testScore >= bestTestScore):
+      bestTestScore = testScore
+      saveModelToDrive(model, "baseRandomForest.pkl")
+      print(f"-> New best model saved with test score: {testScore:.4f} (train: {trainScore:.4f})")
+
+      if (trainScore >= .75) and (testScore >= .75):
+        print("🎉 Target threshold of 0.75 reached!")
+
+    scoreVsHyperparameterDictionary = appendToHyperparameterDictionary(scoreVsHyperparameterDictionary,
                                                                       criterion, nEstimators, maxDepth,
                                                                       maxFeatures, trainScore, testScore)
-    if (iteration == 149):
+    if (iteration == (maxIterations-1)):
       df = createSortedScoreVsHyperparameterDF(scoreVsHyperparameterDictionary)
       display(df)
       dataPrep.saveCSVToDrive(df,"BestHyperparameters.csv")
@@ -123,25 +131,20 @@ def main():
     if (iteration % 10) == 9:
       bestFiveHyperparameterGroups = createSortedScoreVsHyperparameterDF(scoreVsHyperparameterDictionary).head(5)
       display(bestFiveHyperparameterGroups)
-      possibleNEstimators = adjustRange(bestFiveHyperparameterGroups['nEstimators'])
-      possibleMaxDepth = adjustRange(bestFiveHyperparameterGroups['maxDepth'])
-      possibleMaxFeatures = adjustRange(bestFiveHyperparameterGroups['maxFeatures'])
+      if (bestFiveHyperparameterGroups.iloc[0].testScore >= bestTestScore):
+        possibleNEstimators = adjustRange(bestFiveHyperparameterGroups['nEstimators'])
+        possibleMaxDepth = adjustRange(bestFiveHyperparameterGroups['maxDepth'])
+        possibleMaxFeatures = adjustRange(bestFiveHyperparameterGroups['maxFeatures'])
       if (modelExistsInDrive("baseRandomForest.pkl")):
-        print('best model found')
         testSet = dataPrep.retrieveCSVFromDrive("SalesReinforcerTest.csv")
         bestModel = retrieveModelFromDrive("baseRandomForest.pkl")
         test_predictions = bestModel.predict(testSet.drop(columns=['isSubscribed']))
-        testScore = f1_score(testSet['isSubscribed'], test_predictions)
-        print(f"test score: {testScore}")
-        return
-      scoreVsHyperparameterDictionary = {
-          "criterion":[],
-          "nEstimators":[],
-          "maxDepth":[],
-          "maxFeatures":[],
-          "trainScore":[],
-          "testScore":[]
-      }
+        current_f1 = f1_score(testSet['isSubscribed'], test_predictions)
+
+        # Early exit only if we hit the desired high-performance threshold of 0.75
+        if current_f1 >= 0.75:
+          print(f"Target F1 met! Final test score: {current_f1}")
+          return
 
 if __name__ == "__main__":
   main()
