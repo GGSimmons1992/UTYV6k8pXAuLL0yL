@@ -191,16 +191,15 @@ def replaceNanWithZero(df):
     df[col] = df[col].fillna(0)
   return df
 
-def removeStageAndStatus(df):
+def removeStage(df):
   df.drop('Stage',axis=1,inplace=True)
-  df.drop('Status',axis=1,inplace=True)
   return df
 
 def main():
   data = retrieveCSVFromDrive("SalesCRM - CRM.csv")
   dateTransformedData = transformDate(data)
-  statusLessData = removeStageAndStatus(dateTransformedData)
-  nonNanData = replaceNanWithZero(statusLessData)
+  stageLessData = removeStage(dateTransformedData)
+  nonNanData = replaceNanWithZero(stageLessData)
   baseName = "SalesReinforcer" # Define baseName here
   saveCSVToDrive(nonNanData,"cleanedData.csv")
   np.random.seed(51)
