@@ -126,6 +126,10 @@ class FeatureSelectionEnv(BaseSalesEnv):
 
     # Penalty for adding features
     self.feature_penalty_weight = 0.01 # Adjustable parameter
+    self._score_cache = {}
+    self.prev_score = 0.0
+    self.best_score = 0.0
+    self.best_state = None
 
     # Define actions:
     # 0 to n_initial_features-1: Toggle feature i
@@ -156,11 +160,38 @@ class FeatureSelectionEnv(BaseSalesEnv):
         "max_depth": np.array([self.max_depth], dtype=np.int32)
     }
 
-  def _calculate_reward(self):
-    # Select features based on the mask
+  def _score_state(self):
+    # Penalized F1 of the current configuration (cached; identical states recur often)
     selected_feature_indices = np.where(self.feature_mask == 1)[0]
     if len(selected_feature_indices) == 0:
-        return 0.0 # No features selected, reward is 0
+        return 0.0
+    key = (self.feature_mask.tobytes(), self.n_estimators, self.max_features_idx,
+           self.criterion_idx, self.max_depth)
+    if key not in self._score_cache:
+        self._score_cache[key] = self._fit_and_score(selected_feature_indices)
+    return self._score_cache[key]
+
+  def _calculate_reward(self):
+    # Potential-based reward: change in score. Returns telescope to the final score,
+    # so toggling a feature on and off earns nothing and the agent must keep improving.
+    score = self._score_state()
+    reward = score - self.prev_score
+    self.prev_score = score
+    if score > self.best_score:
+        self.best_score = score
+        self.best_state = self._snapshot()
+    return reward
+
+  def _snapshot(self):
+    return (self.feature_mask.copy(), self.n_estimators, self.max_features_idx,
+            self.criterion_idx, self.max_depth)
+
+  def restore_best_state(self):
+    if self.best_state is not None:
+        (self.feature_mask, self.n_estimators, self.max_features_idx,
+         self.criterion_idx, self.max_depth) = (self.best_state[0].copy(),) + self.best_state[1:]
+
+  def _fit_and_score(self, selected_feature_indices):
 
     # Get feature names from the training data using the stored original names
     selected_features = [self.original_feature_names[i] for i in selected_feature_indices]
@@ -184,12 +215,12 @@ class FeatureSelectionEnv(BaseSalesEnv):
 
     model.fit(X_train, y_train)
     predictions = model.predict(X_dev)
-    reward = f1_score(y_dev, predictions)
+    score = f1_score(y_dev, predictions)
 
     # Apply penalty for the number of selected features
-    reward -= len(selected_feature_indices) * self.feature_penalty_weight
+    score -= len(selected_feature_indices) * self.feature_penalty_weight
 
-    return reward
+    return score
 
   def step(self, action):
     self.current_step += 1
@@ -246,6 +277,9 @@ class FeatureSelectionEnv(BaseSalesEnv):
     self.max_features_idx = self.initial_max_features_idx
     self.criterion_idx = self.initial_criterion_idx
     self.max_depth = self.initial_max_depth
+    self.prev_score = 0.0
+    self.best_score = 0.0
+    self.best_state = None
 
     return self._get_observation(), {}
 
