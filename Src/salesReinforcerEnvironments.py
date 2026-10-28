@@ -130,6 +130,9 @@ class FeatureSelectionEnv(BaseSalesEnv):
     self.prev_score = 0.0
     self.best_score = 0.0
     self.best_state = None
+    # Best state across all episodes; unlike best_state it survives reset()
+    self.overall_best_score = 0.0
+    self.overall_best_state = None
 
     # Define actions:
     # 0 to n_initial_features-1: Toggle feature i
@@ -180,6 +183,9 @@ class FeatureSelectionEnv(BaseSalesEnv):
     if score > self.best_score:
         self.best_score = score
         self.best_state = self._snapshot()
+    if score > self.overall_best_score:
+        self.overall_best_score = score
+        self.overall_best_state = self._snapshot()
     return reward
 
   def _snapshot(self):
@@ -187,9 +193,15 @@ class FeatureSelectionEnv(BaseSalesEnv):
             self.criterion_idx, self.max_depth)
 
   def restore_best_state(self):
-    if self.best_state is not None:
+    self.restore_state(self.best_state)
+
+  def restore_overall_best_state(self):
+    self.restore_state(self.overall_best_state)
+
+  def restore_state(self, state):
+    if state is not None:
         (self.feature_mask, self.n_estimators, self.max_features_idx,
-         self.criterion_idx, self.max_depth) = (self.best_state[0].copy(),) + self.best_state[1:]
+         self.criterion_idx, self.max_depth) = (state[0].copy(),) + state[1:]
 
   def _fit_and_score(self, selected_feature_indices):
 
