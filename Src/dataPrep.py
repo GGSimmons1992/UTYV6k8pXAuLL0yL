@@ -166,14 +166,14 @@ def splitData(baseName):
     originalYArray = originalY.values.ravel()
     originalX = df.drop('isSubscribed', axis=1)
 
-    # 1. Split into temporary train and final test sets (80/20)
+    # 1. Split into temporary train and final test sets (60/40 instead of 80/20 to keep more in evaluation sets)
     XTempTrain, XTest, yTempTrain, yTest = train_test_split(
-        originalX, originalYArray, test_size=0.2, random_state=51, stratify=originalYArray
+        originalX, originalYArray, test_size=0.4, random_state=51, stratify=originalYArray
     )
 
-    # 2. Split temporary train further into Sub-Train and Dev/Validation sets (80/20 of the train set)
+    # 2. Split temporary train further into Sub-Train and Dev/Validation sets (60/40)
     XSubTrain, XDev, ySubTrain, yDev = train_test_split(
-        XTempTrain, yTempTrain, test_size=0.2, random_state=51, stratify=yTempTrain
+        XTempTrain, yTempTrain, test_size=0.4, random_state=51, stratify=yTempTrain
     )
 
     # 3. Apply oversampling ONLY to the Sub-Train data
@@ -218,11 +218,23 @@ def main():
   baseName = "SalesReinforcer"
   saveCSVToDrive(nonNanData, "cleanedData.csv")
   np.random.seed(51)
-  if not fileExistsInDrive(f"{baseName}Train.csv"):
-      splitData(baseName)
+  # Force re-splitting to apply updated split configuration
+  splitData(baseName)
   processTrainData(baseName)
   processTestData(baseName, splitName='Dev')
   processTestData(baseName, splitName='Test')
 
 if __name__ == "__main__":
     main()
+
+    # Diagnostic cell to check datasets
+    train_df = retrieveCSVFromDrive("SalesReinforcerTrain.csv")
+    dev_df = retrieveCSVFromDrive("SalesReinforcerDev.csv")
+    test_df = retrieveCSVFromDrive("SalesReinforcerTest.csv")
+
+    print("Train shape:", train_df.shape)
+    print("Dev shape:", dev_df.shape)
+    print("Test shape:", test_df.shape)
+    print("\nTrain target class distribution:\n", train_df['isSubscribed'].value_counts())
+    print("\nDev target class distribution:\n", dev_df['isSubscribed'].value_counts())
+    print("\nTest target class distribution:\n", test_df['isSubscribed'].value_counts())
