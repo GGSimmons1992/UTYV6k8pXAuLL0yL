@@ -1,5 +1,3 @@
-!pip install category_encoders
-
 import numpy as np
 import numpy
 import pandas as pd
@@ -102,21 +100,21 @@ def scaleDF(df,baseName):
   savePickleFileToDrive(scaler,f"{baseName}Scaler.pkl")
   return df
 
-def processTestData(baseName):
-  df = retrieveCSVFromDrive(f"{baseName}Test.csv")
+def processTestData(baseName, splitName='Test'):
+  # Process any non-training split (like 'Test' or 'Dev') using fitted parameters
+  df = retrieveCSVFromDrive(f"{baseName}{splitName}.csv")
   yArray = df[['isSubscribed']].values.ravel()
-  df = df.drop('isSubscribed',axis = 1)
-
+  df = df.drop('isSubscribed', axis=1)
 
   rawDF = df.copy()
-  saveCSVToDrive(rawDF,f"{baseName}RawTest.csv")
+  saveCSVToDrive(rawDF, f"{baseName}Raw{splitName}.csv")
 
-  numericalDF,categoricalDF = separateDFBySubtype(df,baseName)
-  scaledDF = scaleTestDF(numericalDF,baseName)
-  encodedDF = encodeTestDF(categoricalDF,baseName)
-  finalDF = pd.concat([scaledDF,encodedDF],axis=1)
-  finalDF['isSubscribed'] = yArray.reshape(-1,1)
-  saveCSVToDrive(finalDF,f"{baseName}Test.csv")
+  numericalDF, categoricalDF = separateDFBySubtype(df, baseName)
+  scaledDF = scaleTestDF(numericalDF, baseName)
+  encodedDF = encodeTestDF(categoricalDF, baseName)
+  finalDF = pd.concat([scaledDF, encodedDF], axis=1)
+  finalDF['isSubscribed'] = yArray.reshape(-1, 1)
+  saveCSVToDrive(finalDF, f"{baseName}{splitName}.csv")
 
 def processTrainData(baseName):
   df = retrieveCSVFromDrive(f"{baseName}Train.csv")
@@ -217,14 +215,14 @@ def main():
   dateTransformedData = transformDate(data)
   stageLessData = removeStage(dateTransformedData)
   nonNanData = replaceNanWithZero(stageLessData)
-  baseName = "SalesReinforcer" # Define baseName here
-  saveCSVToDrive(nonNanData,"cleanedData.csv")
+  baseName = "SalesReinforcer"
+  saveCSVToDrive(nonNanData, "cleanedData.csv")
   np.random.seed(51)
-  # baseName = "SalesReinforcer" # Original line, now moved up
-  if (fileExistsInDrive(f"{baseName}Train.csv") == False):
+  if not fileExistsInDrive(f"{baseName}Train.csv"):
       splitData(baseName)
   processTrainData(baseName)
-  processTestData(baseName)
+  processTestData(baseName, splitName='Dev')
+  processTestData(baseName, splitName='Test')
 
 if __name__ == "__main__":
     main()
