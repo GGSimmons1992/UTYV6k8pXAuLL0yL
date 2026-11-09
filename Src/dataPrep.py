@@ -1,3 +1,5 @@
+!pip install category_encoders
+
 import numpy as np
 import numpy
 import pandas as pd
@@ -164,21 +166,36 @@ def splitData(baseName):
     df = binarizeTargetsFromDF(df)
     originalY = df[['isSubscribed']]
     originalYArray = originalY.values.ravel()
-    originalX = df.drop('isSubscribed',axis=1)
+    originalX = df.drop('isSubscribed', axis=1)
 
-    # Split data first into training and testing sets
-    XTrain, XTest, yTrain, yTest = train_test_split(originalX, originalYArray, test_size=0.2, random_state=51, stratify=originalYArray)
+    # 1. Split into temporary train and final test sets (80/20)
+    XTempTrain, XTest, yTempTrain, yTest = train_test_split(
+        originalX, originalYArray, test_size=0.2, random_state=51, stratify=originalYArray
+    )
 
-    # Apply SMOTE only to the training data
-    resampledXTrain, resampledYTrain = overSample(XTrain, yTrain, baseName)
+    # 2. Split temporary train further into Sub-Train and Dev/Validation sets (80/20 of the train set)
+    XSubTrain, XDev, ySubTrain, yDev = train_test_split(
+        XTempTrain, yTempTrain, test_size=0.2, random_state=51, stratify=yTempTrain
+    )
 
-    train = resampledXTrain.copy()
-    train['isSubscribed'] = resampledYTrain
-    saveCSVToDrive(train,f"{baseName}Train.csv")
+    # 3. Apply oversampling ONLY to the Sub-Train data
+    resampledXSubTrain, resampledYSubTrain = overSample(XSubTrain, ySubTrain, baseName)
 
+    # 4. Save the three datasets
+    # Save Train (Oversampled Sub-Train)
+    train = resampledXSubTrain.copy()
+    train['isSubscribed'] = resampledYSubTrain
+    saveCSVToDrive(train, f"{baseName}Train.csv")
+
+    # Save Dev (Untouched Dev Set)
+    dev = XDev.copy()
+    dev['isSubscribed'] = yDev
+    saveCSVToDrive(dev, f"{baseName}Dev.csv")
+
+    # Save Test (Untouched Test Set)
     test = XTest.copy()
     test['isSubscribed'] = yTest
-    saveCSVToDrive(test,f"{baseName}Test.csv")
+    saveCSVToDrive(test, f"{baseName}Test.csv")
 
 def replaceNanWithZero(df):
   '''
