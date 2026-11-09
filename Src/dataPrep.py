@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier as rf
 import pickle
-from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import RandomOverSampler, SMOTE, SMOTENC
 from os.path import exists
 from sklearn.preprocessing import StandardScaler
 import category_encoders as ce
@@ -151,12 +151,14 @@ def binarizeTargetsFromDF(df):
     df.drop('Subscribed',axis=1,inplace=True)
     return df
 
-def overSample(X,y,baseName):
-    # Initialize and apply RandomOverSampler
-    # RandomOverSampler works directly on the input features without specific categorical handling.
-    balancer = RandomOverSampler(random_state=51)
-    resampledX, resampledy = balancer.fit_resample(X, y)
+def overSample(X, y, baseName):
+    print("[Oversampling] Applying SMOTENC to the training subset...")
+    # Identify the index of columns that are categorical (not numeric)
+    categorical_features_indices = [i for i, col in enumerate(X.columns) if not np.issubdtype(X[col].dtype, np.number)]
 
+    # Set k_neighbors=2 because the minority class contains only 5 samples in the train split
+    balancer = SMOTENC(categorical_features=categorical_features_indices, k_neighbors=2, random_state=51)
+    resampledX, resampledy = balancer.fit_resample(X, y)
     return resampledX, resampledy
 
 def splitData(baseName):
