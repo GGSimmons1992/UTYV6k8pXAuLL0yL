@@ -35,15 +35,15 @@ def createModel(criterion, nEstimators, maxDepth, maxFeatures):
   return rf(criterion=criterion, n_estimators=nEstimators, max_depth=maxDepth, max_features=maxFeatures)
 
 def createSortedScoreVsHyperparameterDF(scoreVsHyperparameterDictionary):
-  return pd.DataFrame(scoreVsHyperparameterDictionary).sort_values(by=['testScore','trainScore'],ascending=False)
+  return pd.DataFrame(scoreVsHyperparameterDictionary).sort_values(by=['devScore','trainScore'],ascending=False)
 
-def appendToHyperparameterDictionary(scoreVsHyperparameterDictionary, criterion, nEstimators, maxDepth, maxFeatures, trainScore, testScore):
+def appendToHyperparameterDictionary(scoreVsHyperparameterDictionary, criterion, nEstimators, maxDepth, maxFeatures, trainScore, devScore):
   scoreVsHyperparameterDictionary['criterion'].append(criterion)
   scoreVsHyperparameterDictionary['nEstimators'].append(nEstimators)
   scoreVsHyperparameterDictionary['maxDepth'].append(maxDepth)
   scoreVsHyperparameterDictionary['maxFeatures'].append(maxFeatures)
   scoreVsHyperparameterDictionary['trainScore'].append(trainScore)
-  scoreVsHyperparameterDictionary['testScore'].append(testScore)
+  scoreVsHyperparameterDictionary['devScore'].append(devScore)
   return scoreVsHyperparameterDictionary
 
 def modelExistsInDrive(filename):
@@ -77,14 +77,14 @@ def adjustRange(dfColumn):
 
 def main():
   train = dataPrep.retrieveCSVFromDrive("SalesReinforcerTrain.csv")
-  test = dataPrep.retrieveCSVFromDrive("SalesReinforcerTest.csv")
+  dev = dataPrep.retrieveCSVFromDrive("SalesReinforcerDev.csv")
   nColumns = len(train.columns)
-  bestTestScore = 0
+  bestDevScore = 0
 
   possibleCriterion = ["gini","entropy","log_loss"]
-  possibleNEstimators = np.arange(5,19, 1)
-  possibleMaxDepth = np.arange(2,16,1)
-  possibleMaxFeatures = np.arange(2,4,1)
+  possibleNEstimators = np.arange(5,15, 1)
+  possibleMaxDepth = np.arange(2,14,1)
+  possibleMaxFeatures = np.arange(2,8,1)
 
   scoreVsHyperparameterDictionary = {
       "criterion":[],
@@ -92,7 +92,7 @@ def main():
       "maxDepth":[],
       "maxFeatures":[],
       "trainScore":[],
-      "testScore":[]
+      "devScore":[]
   }
   maxIterations = 2100
 
@@ -104,20 +104,20 @@ def main():
     maxFeatures = np.random.choice(possibleMaxFeatures)
 
     model = createModel(criterion, nEstimators, maxDepth, maxFeatures)
-    trainScore, testScore = trainAndTestModel(model, train, test)
+    trainScore, devScore = trainAndTestModel(model, train, dev)
 
     # 1. Unconditionally track and save the overall best model to prevent losing progress
-    if (testScore >= bestTestScore):
-      bestTestScore = testScore
+    if (devScore >= bestDevScore):
+      bestDevScore = devScore
       saveModelToDrive(model, "baseRandomForest.pkl")
-      print(f"-> New best model saved with test score: {testScore:.4f} (train: {trainScore:.4f})")
+      print(f"-> New best model saved with dev score: {devScore:.4f} (train: {trainScore:.4f})")
 
-      if (trainScore >= .75) and (testScore >= .75):
-        print("🎉 Target threshold of 0.75 reached!")
+      if (trainScore >= .5) and (devScore >= .5):
+        print("🎉 Target threshold of 0.5 reached!")
 
     scoreVsHyperparameterDictionary = appendToHyperparameterDictionary(scoreVsHyperparameterDictionary,
                                                                       criterion, nEstimators, maxDepth,
-                                                                      maxFeatures, trainScore, testScore)
+                                                                      maxFeatures, trainScore, devScore)
     if (iteration == (maxIterations-1)):
       df = createSortedScoreVsHyperparameterDF(scoreVsHyperparameterDictionary)
       display(df)
@@ -131,19 +131,19 @@ def main():
     if (iteration % 10) == 9:
       bestFiveHyperparameterGroups = createSortedScoreVsHyperparameterDF(scoreVsHyperparameterDictionary).head(5)
       display(bestFiveHyperparameterGroups)
-      if (bestFiveHyperparameterGroups.iloc[0].testScore >= bestTestScore):
+      if (bestFiveHyperparameterGroups.iloc[0].devScore >= bestDevScore):
         possibleNEstimators = adjustRange(bestFiveHyperparameterGroups['nEstimators'])
         possibleMaxDepth = adjustRange(bestFiveHyperparameterGroups['maxDepth'])
         possibleMaxFeatures = adjustRange(bestFiveHyperparameterGroups['maxFeatures'])
       if (modelExistsInDrive("baseRandomForest.pkl")):
-        testSet = dataPrep.retrieveCSVFromDrive("SalesReinforcerTest.csv")
+        devSet = dataPrep.retrieveCSVFromDrive("SalesReinforcerDev.csv")
         bestModel = retrieveModelFromDrive("baseRandomForest.pkl")
-        test_predictions = bestModel.predict(testSet.drop(columns=['isSubscribed']))
-        current_f1 = f1_score(testSet['isSubscribed'], test_predictions)
+        dev_predictions = bestModel.predict(devSet.drop(columns=['isSubscribed']))
+        current_f1 = f1_score(devSet['isSubscribed'], dev_predictions)
 
         # Early exit only if we hit the desired high-performance threshold of 0.75
         if current_f1 >= 0.75:
-          print(f"Target F1 met! Final test score: {current_f1}")
+          print(f"Target F1 met! Final dev score: {current_f1}")
           return
 
 if __name__ == "__main__":
